@@ -1,10 +1,14 @@
+import os.path
+import shutil
+
 import torch
-from utils import save_checkpoint, load_checkpoint, save_some_examples
+from utils import save_checkpoint, load_checkpoint, save_some_examples, plot_examples
 import torch.nn as nn
 import torch.optim as optim
 import config
 from dataset import MapDataset
-from generator_model import Generator
+# from generator_model import Generator
+from lrpnet import LRPNet as Generator
 from discriminator_model import Discriminator
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -81,9 +85,9 @@ def main():
     g_scaler = torch.cuda.amp.GradScaler()
     d_scaler = torch.cuda.amp.GradScaler()
     val_dataset = MapDataset(root_dir=config.VAL_DIR)
-    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=5, shuffle=True)
 
-    for epoch in range(config.NUM_EPOCHS):
+    for epoch in range(0, config.NUM_EPOCHS):
         train_fn(
             disc, gen, train_loader, opt_disc, opt_gen, L1_LOSS, BCE, g_scaler, d_scaler,
         )
@@ -91,9 +95,43 @@ def main():
         if config.SAVE_MODEL and epoch % 5 == 0:
             save_checkpoint(gen, opt_gen, filename=config.CHECKPOINT_GEN)
             save_checkpoint(disc, opt_disc, filename=config.CHECKPOINT_DISC)
+        if epoch % 100 == 0 and epoch != 0:
+            # 使用复制当前的checkpoint gen.pth1.tar 和 disc.pth1.tar 文件到 process 文件夹
+            target_gen = os.path.join("pretrain/lrp", "gen_" + epoch.__str__() +".pth.tar")
+            target_disc = os.path.join("pretrain/lrp", "disc_" + epoch.__str__() +".pth.tar")
+            shutil.copy("gen.pth.tar", target_gen)
+            shutil.copy("disc.pth.tar", target_disc)
 
         save_some_examples(gen, val_loader, epoch, folder="evaluation")
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    try_model = False
+
+    if try_model:
+        ori_folder = 'process/imgr/ori/'
+        res_folder = 'process/imgr/process_reshape/'
+        input_folder = 'process/imgr/ori_reshape/'
+        output_folder = 'process/imgr/process_re/'
+
+        # 前处理
+        import test as t
+        t.ori_reshape(ori_folder, input_folder)
+        # Will just use pretrained weights and run on images
+        # in test_images/ and save the ones to LD in saved/
+        gen = Generator(in_channels=3).to(config.DEVICE)
+        opt_gen = optim.Adam(gen.parameters(), lr=config.LEARNING_RATE, betas=(0.5, 0.999))
+        load_checkpoint(
+            config.CHECKPOINT_GEN,
+            gen,
+            opt_gen,
+            config.LEARNING_RATE,
+        )
+        plot_examples(input_folder,
+                      output_folder, gen)
+        # 后处理
+        t.img_reshape_to_ori(ori_folder,output_folder,res_folder)
+    else:
+        # This will train from sketch
+        main()

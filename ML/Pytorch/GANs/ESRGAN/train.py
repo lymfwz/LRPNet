@@ -148,7 +148,7 @@ if __name__ == "__main__":
             opt_gen,
             config.LEARNING_RATE,
         )
-        plot_examples("test_images/", gen)
+        plot_examples("imgs", gen)
     else:
         # This will train from scratch
         main()

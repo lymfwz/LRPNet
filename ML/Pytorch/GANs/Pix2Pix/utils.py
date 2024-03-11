@@ -1,6 +1,10 @@
+import os
+
+import numpy as np
 import torch
 import config
 from torchvision.utils import save_image
+from PIL import Image
 
 def save_some_examples(gen, val_loader, epoch, folder):
     x, y = next(iter(val_loader))
@@ -9,10 +13,14 @@ def save_some_examples(gen, val_loader, epoch, folder):
     with torch.no_grad():
         y_fake = gen(x)
         y_fake = y_fake * 0.5 + 0.5  # remove normalization#
-        save_image(y_fake, folder + f"/y_gen_{epoch}.png")
-        save_image(x * 0.5 + 0.5, folder + f"/input_{epoch}.png")
-        if epoch == 1:
-            save_image(y * 0.5 + 0.5, folder + f"/label_{epoch}.png")
+        input_image = x * 0.5 + 0.5  # input image after removing normalization
+        # save_image(y_fake, folder + f"/y_gen_{epoch}.png")
+        # save_image(x * 0.5 + 0.5, folder + f"/input_{epoch}.png")
+        combined_image = torch.cat([input_image, y * 0.5 + 0.5, y_fake], dim=2)
+        # Save the combined image
+        save_image(combined_image, folder + f"/combined_{epoch}.png")
+        # if epoch == 1:
+        #     save_image(y * 0.5 + 0.5, folder + f"/label_{epoch}.png")
     gen.train()
 
 
@@ -37,3 +45,17 @@ def load_checkpoint(checkpoint_file, model, optimizer, lr):
         param_group["lr"] = lr
 
 
+def plot_examples(input_folder, output_folder, gen):
+    files = os.listdir(input_folder)
+
+    gen.eval()
+    for file in files:
+        image = Image.open(os.path.join(input_folder, file))
+        with torch.no_grad():
+            line_img = gen(
+                config.transform_only_input(image=np.asarray(image))["image"]
+                .unsqueeze(0)
+                .to(config.DEVICE)
+            )
+        save_image(line_img * 0.5 + 0.5, os.path.join(output_folder, file))
+    gen.train()
